@@ -43,11 +43,24 @@ ORDER BY taille DESC;
 // "Qui Ahmed devrait-il connaître ?" 
 // Critères : amis en commun + même cours + même filière
 
-// TODO: Écrire la requête de recommandation
-// Score = nb_amis_communs * 3 + nb_cours_communs * 2 + (meme_filiere ? 1 : 0)
-MATCH (moi:Etudiant {prenom: "Ahmed"})
-// TODO: Compléter la requête
-RETURN ??? AS suggestion, ??? AS score
+MATCH (moi:Etudiant {prenom: "Ahmed"})-[:CONNAIT]->(ami:Etudiant)
+WITH moi, collect(ami) AS amis
+MATCH (candidat:Etudiant)
+WHERE candidat <> moi AND NOT (moi)-[:CONNAIT]->(candidat)
+WITH moi, candidat, amis
+MATCH (moi)-[:SUIT]->(mc:Cours)
+WITH moi, candidat, amis, collect(mc) AS mesCours
+MATCH (candidat)-[:SUIT]->(cc:Cours)
+WITH moi, candidat, amis, mesCours, collect(cc) AS candidatCours
+MATCH (candidat)-[:CONNAIT]->(amiCommun:Etudiant)
+WHERE amiCommun IN amis
+WITH candidat, mesCours, candidatCours, count(DISTINCT amiCommun) AS nbAmisCommuns
+WITH candidat, nbAmisCommuns,
+     size([c IN mesCours WHERE c IN candidatCours]) AS nbCoursCommuns,
+     CASE WHEN candidat.filiere = moi.filiere THEN 1 ELSE 0 END AS memeFiliere
+RETURN candidat.prenom + " " + candidat.nom AS suggestion,
+       candidat.universite AS universite,
+       nbAmisCommuns * 3 + nbCoursCommuns * 2 + memeFiliere AS score
 ORDER BY score DESC
 LIMIT 5;
 
