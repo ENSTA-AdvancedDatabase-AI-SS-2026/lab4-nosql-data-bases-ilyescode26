@@ -14,8 +14,7 @@ def record_sale(r, product_id, quantity: int = 1):
     Enregistrer une vente dans le classement
     Utiliser ZINCRBY sur la clé LEADERBOARD_KEY
     """
-    # TODO
-    pass
+    r.zincrby(LEADERBOARD_KEY, quantity, str(product_id))
 
 
 def get_top_products(r, n: int = 10) -> list:
@@ -24,8 +23,8 @@ def get_top_products(r, n: int = 10) -> list:
     Format : [{"product_id": "1", "sales": 150}, ...]
     Astuce : ZREVRANGE avec WITHSCORES
     """
-    # TODO
-    pass
+    top_products = r.zrevrange(LEADERBOARD_KEY, 0, n - 1, withscores=True)
+    return [{"product_id": product_id, "sales": int(sales)} for product_id, sales in top_products]
 
 
 def get_product_rank(r, product_id) -> Optional[int]:
@@ -33,8 +32,8 @@ def get_product_rank(r, product_id) -> Optional[int]:
     Retourner le rang 1-based d'un produit
     (1 = best seller, None si pas dans le classement)
     """
-    # TODO: ZREVRANK retourne 0-based, convertir en 1-based
-    pass
+    rank = r.zrevrank(LEADERBOARD_KEY, str(product_id))
+    return rank + 1 if rank is not None else None
 
 
 def get_products_between_ranks(r, start_rank: int, end_rank: int) -> list:
@@ -42,8 +41,12 @@ def get_products_between_ranks(r, start_rank: int, end_rank: int) -> list:
     Retourner les produits entre les rangs start et end (1-based)
     Ex: rangs 3 à 7 → 5 produits
     """
-    # TODO
-    pass
+    # Convertir en 0-based pour Redis
+    start_idx = start_rank - 1
+    end_idx = end_rank - 1
+    
+    products = r.zrevrange(LEADERBOARD_KEY, start_idx, end_idx, withscores=True)
+    return [{"product_id": product_id, "sales": int(sales)} for product_id, sales in products]
 
 
 def simulate_sales_day(r, n_sales: int = 500):
