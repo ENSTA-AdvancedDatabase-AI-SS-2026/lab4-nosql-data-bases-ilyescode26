@@ -53,40 +53,80 @@ def generate_mesure(capteur_id, wilaya, commune, timestamp):
 
 
 def insert_single(session, mesure):
+    """Insérer une seule mesure avec prepared statement"""
+    query = """
+        INSERT INTO mesures_par_capteur 
+        (capteur_id, date_jour, timestamp, wilaya, commune, tension_v, courant_a, puissance_kw, frequence_hz, temperature, alerte, code_alerte)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """
-    TODO: Insérer une seule mesure dans mesures_par_capteur
-    Utiliser une prepared statement
-    """
-    pass
+    prepared = session.prepare(query)
+    session.execute(prepared, (
+        mesure["capteur_id"], mesure["date_jour"], mesure["timestamp"], mesure["wilaya"],
+        mesure["commune"], mesure["tension_v"], mesure["courant_a"], mesure["puissance_kw"],
+        mesure["frequence_hz"], mesure["temperature"], mesure["alerte"],
+        "SURTENSION" if mesure["tension_v"] > 235 else ("SOUS_TENSION" if mesure["tension_v"] < 205 else None)
+    ))
 
 
 def insert_batch(session, mesures: list):
+    """Insérer un batch de max 50 mesures avec UNLOGGED BATCH"""
+    query = """
+        INSERT INTO mesures_par_capteur 
+        (capteur_id, date_jour, timestamp, wilaya, commune, tension_v, courant_a, puissance_kw, frequence_hz, temperature, alerte, code_alerte)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """
-    TODO: Insérer un batch de mesures de manière efficace
-    Utiliser UNLOGGED BATCH pour les séries temporelles
-    Faire des batches de max 50 items (bonne pratique Cassandra)
-    """
-    pass
+    prepared = session.prepare(query)
+    batch = BatchStatement(batch_type=BatchType.UNLOGGED)
+
+    for mesure in mesures[:50]:
+        code_alerte = None
+        if mesure["tension_v"] > 235:
+            code_alerte = "SURTENSION"
+        elif mesure["tension_v"] < 205:
+            code_alerte = "SOUS_TENSION"
+        elif mesure["temperature"] > 60:
+            code_alerte = "SURCHAUFFE"
+
+        batch.add(prepared, (
+            mesure["capteur_id"], mesure["date_jour"], mesure["timestamp"], mesure["wilaya"],
+            mesure["commune"], mesure["tension_v"], mesure["courant_a"], mesure["puissance_kw"],
+            mesure["frequence_hz"], mesure["temperature"], mesure["alerte"], code_alerte
+        ))
+
+    session.execute(batch)
 
 
 def run_ingestion(session):
-    """
-    TODO: Générer et insérer NB_CAPTEURS × MINUTES_HISTORIQUE mesures
-    1. Générer les capteurs (ID aléatoires + assignation wilaya/commune)
-    2. Pour chaque minute des MINUTES_HISTORIQUE dernières minutes
-       → Insérer les mesures de tous les capteurs
-    3. Mesurer et afficher :
-       - Nombre total d'insertions
-       - Durée totale
-       - Débit (mesures/seconde)
-    """
+    """Générer et insérer NB_CAPTEURS × MINUTES_HISTORIQUE mesures"""
     print(f"Démarrage ingestion : {NB_CAPTEURS} capteurs × {MINUTES_HISTORIQUE} min")
     start = time.time()
-    
-    # TODO: Implémenter
-    
+
+    # 1. Générer les capteurs avec assignation wilaya/commune
+    capteurs = []
+    for _ in range(NB_CAPTEURS):
+        wilaya = random.choice(WILAYAS)
+        commune = random.choice(COMMUNES[wilaya])
+        capteurs.append({"id": uuid.uuid4(), "wilaya": wilaya, "commune": commune})
+
+    # 2. Générer les mesures par minute
+    now = datetime.now().replace(second=0, microsecond=0)
+    total = 0
+
+    for minute in range(MINUTES_HISTORIQUE):
+        timestamp = now - timedelta(minutes=minute)
+        mesures = []
+
+        for capteur in capteurs:
+            mesure = generate_mesure(capteur["id"], capteur["wilaya"], capteur["commune"], timestamp)
+            mesures.append(mesure)
+
+        # Insérer par batches de 50
+        for i in range(0, len(mesures), 50):
+            insert_batch(session, mesures[i:i+50])
+
+        total += len(mesures)
+
     elapsed = time.time() - start
-    total = NB_CAPTEURS * MINUTES_HISTORIQUE
     print(f"\n✅ {total:,} mesures insérées en {elapsed:.1f}s")
     print(f"   Débit : {total/elapsed:,.0f} mesures/seconde")
 
