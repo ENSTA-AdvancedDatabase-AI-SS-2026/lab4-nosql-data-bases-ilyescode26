@@ -7,7 +7,7 @@ import json
 
 r = redis.Redis(host='localhost', port=6379, decode_responses=True)
 
-
+#e=10
 def store_product(r, product_id, product_data: dict):
     """
     Stocker un produit comme Hash Redis
