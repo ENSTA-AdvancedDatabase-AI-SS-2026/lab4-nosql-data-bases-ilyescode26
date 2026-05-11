@@ -44,5 +44,40 @@ Implémenter des structures de données Redis pour une application e-commerce (S
 
 **Structure Redis**: **Sorted Set** `leaderboard:sales`
 
+## Comparaison de Performance (Hit vs Miss)
+
+| Type | Temps Moyen |
+|------|-------------|
+| **Cache HIT** | ~1-5ms (Redis en mémoire) |
+| **Cache MISS** | ~2000ms (requête DB simulée) |
+
+**Gain de performance**: Le cache HIT est ~400x plus rapide que le MISS.
+
+## Justification des Choix de Modélisation
+
+| Fonctionnalité | Structure Redis | Justification |
+|----------------|-----------------|---------------|
+| Produits | Hash (`HSET`) | Champs nommés, facile à récupérer |
+| Panier | Hash (`HINCRBY`) | Incrémentation rapide des quantités |
+| Historique | List (`LPUSH`+`LTRIM`) | Garder les N derniers éléments facilement |
+| Catégories | Set (`SADD`+`SINTER`) | Intersections et unions natifs |
+| Classement | Sorted Set (`ZINCRBY`) | Classement automatique par score |
+| Cache produits | String avec TTL (`SETEX`) | Expiration automatique pour fraîcheur |
+
+## Questions de Réflexion
+
+### 1. Que se passe-t-il si Redis redémarre ?
+**Réponse**: Les données en mémoire RAM sont perdues par défaut. Solutions : persistance avec **RDB** (snapshots) ou **AOF** (log des commandes), ou replication Redis pour la haute disponibilité.
+
+### 2. Comment gérer la cohérence cache/DB en cas d'accès concurrent ?
+**Réponse**: Stratégies possibles :
+- **Cache-Aside** : On invalide le cache à chaque mise à jour DB
+- **Write-Through** : On écrit simultanément en cache et DB
+- **TTL** : Le cache expire automatiquement après un temps défini
+- Utiliser des verrous distribués (Redis `SETNX`) si nécessaire
+
+### 3. Quand un TTL trop court est-il problématique ?
+**Réponse**: Un TTL trop court cause le **thundering herd problem** (requeêtes simultanées vers la DB quand le cache expire). Cela augmente la charge DB et crée des latences. Solution : utiliser des TTL variables ou le pattern *probabilistic early expiration*.
+
 ## Résultats
 Tous les exercices sont fonctionnels et démontrent l'utilisation efficace des structures de données Redis pour un cas d'usage e-commerce.
